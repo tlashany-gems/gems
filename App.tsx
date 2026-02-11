@@ -8,244 +8,325 @@ import { PlayerAvatar } from './components/PlayerAvatar';
 import { Timer } from './components/Timer';
 
 const ROUND_TIME = 20;
-const tg = (window as any).Telegram?.WebApp;
 
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<RoomState | null>(null);
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [roomInput, setRoomInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState(`seed-${Math.random()}`);
-  
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [room, setRoom] = useState<RoomState | null>(null);
+  const [playerId, setPlayerId] = useState<string>('');
+  const [playerName, setPlayerName] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const timerRef = useRef<number | null>(null);
 
+  // 初始化玩家
   useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
     if (tg) {
-      tg.ready();
       tg.expand();
       const user = tg.initDataUnsafe?.user;
       if (user) {
-        setNameInput(`${user.first_name || ''}`.trim() || user.username || 'لاعب');
-        if (user.photo_url) setSelectedAvatar(user.photo_url);
+        setPlayerName(user.first_name + (user.last_name ? ` ${user.last_name}` : ''));
+        setPlayerId(user.id.toString());
+      } else {
+        const fallbackId = 'p_' + Math.random().toString(36).substr(2, 9);
+        setPlayerId(fallbackId);
       }
+    } else {
+      const fallbackId = 'p_' + Math.random().toString(36).substr(2, 9);
+      setPlayerId(fallbackId);
     }
   }, []);
 
-  const playSound = (type: 'win' | 'click' | 'tick') => {
-    if (tg?.HapticFeedback) {
-      if (type === 'win') tg.HapticFeedback.notificationOccurred('success');
-      else tg.HapticFeedback.impactOccurred('light');
-    }
-  };
-
-  const createRoom = async () => {
-    if (!nameInput) return;
-    setLoading(true);
-    const roomId = Math.random().toString(36).substring(7).toUpperCase();
-    const userId = tg?.initDataUnsafe?.user?.id?.toString() || 'host-' + Date.now();
-    
-    const host: Player = {
-      id: userId,
-      name: nameInput,
-      avatar: selectedAvatar.startsWith('http') ? selectedAvatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedAvatar}`,
-      points: 0,
-      isHost: true,
-      isAlive: true
-    };
-
-    const newRoom: RoomState = {
-      roomId,
-      players: [host],
-      round: 0,
-      status: 'lobby',
-      timeLeft: ROUND_TIME,
-      history: []
-    };
-
-    await storageService.saveRoom(newRoom);
-    setGameState(newRoom);
-    setCurrentPlayer(host);
-    
-    if (tg?.initDataUnsafe?.user) {
-      await telegramService.notifyRoomCreated(tg.initDataUnsafe.user, roomId);
-    }
-
-    setLoading(false);
-    playSound('click');
-  };
-
-  const joinRoom = async () => {
-    if (!roomInput || !nameInput) return;
-    setLoading(true);
-    const room = await storageService.getRoom(roomInput.toUpperCase());
-    if (room) {
-      const newPlayer: Player = {
-        id: tg?.initDataUnsafe?.user?.id?.toString() || 'player-' + Date.now(),
-        name: nameInput,
-        avatar: selectedAvatar.startsWith('http') ? selectedAvatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedAvatar}`,
-        points: 0,
-        isHost: false,
-        isAlive: true
-      };
-      room.players.push(newPlayer);
-      await storageService.saveRoom(room);
-      setGameState(room);
-      setCurrentPlayer(newPlayer);
-      playSound('click');
-    } else {
-      alert('المجلس غير موجود!');
-    }
-    setLoading(false);
-  };
-
-  const startNextRound = useCallback(async () => {
-    if (!gameState || !currentPlayer?.isHost) return;
-    setLoading(true);
-    const types = Object.values(ChallengeType);
-    const randomType = types[Math.floor(Math.random() * types.length)];
-    const challenge = await geminiService.generateChallenge(randomType);
-
-    const updatedRoom: RoomState = {
-      ...gameState,
-      status: 'playing',
-      round: gameState.round + 1,
-      currentChallenge: challenge,
-      timeLeft: ROUND_TIME,
-      players: gameState.players.map(p => ({ ...p, currentVote: undefined }))
-    };
-
-    await storageService.saveRoom(updatedRoom);
-    setGameState(updatedRoom);
-    setLoading(false);
-  }, [gameState, currentPlayer]);
-
+  // Sync with Storage Simulation
   useEffect(() => {
-    if (gameState?.status === 'playing' && gameState.timeLeft > 0) {
-      timerRef.current = setInterval(() => {
-        setGameState(prev => {
-          if (!prev) return null;
-          if (prev.timeLeft <= 1) {
+    if (room && room.status === 'playing') {
+      timerRef.current = window.setInterval(() => {
+        setRoom(prev => {
+          if (!prev || prev.timeLeft <= 0) {
             if (timerRef.current) clearInterval(timerRef.current);
-            return { ...prev, timeLeft: 0, status: 'round_end' };
+            return prev ? { ...prev, status: 'round_end' as const, timeLeft: 0 } : null;
           }
           return { ...prev, timeLeft: prev.timeLeft - 1 };
         });
       }, 1000);
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [gameState?.status, gameState?.timeLeft]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [room?.status, room?.round]);
 
-  const handleVote = async (option: string) => {
-    if (!gameState || !currentPlayer || gameState.status !== 'playing') return;
+  const createRoom = async () => {
+    if (!playerName) return alert('يرجى إدخال اسمك أولاً');
+    setLoading(true);
+    const newRoomId = Math.random().toString(36).substr(2, 6).toUpperCase();
+    const newPlayer: Player = {
+      id: playerId,
+      name: playerName,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${playerName}`,
+      points: 0,
+      isHost: true,
+      isAlive: true
+    };
+
+    const newState: RoomState = {
+      roomId: newRoomId,
+      players: [newPlayer],
+      round: 1,
+      status: 'lobby',
+      timeLeft: ROUND_TIME,
+      history: []
+    };
+
+    await storageService.saveRoom(newState);
+    setRoom(newState);
+    setLoading(false);
     
-    let pointsToAdd = 0;
-    if (gameState.currentChallenge?.correctAnswer === option) {
-      const alreadyAnsweredCount = gameState.players.filter(p => p.currentVote).length;
-      pointsToAdd = alreadyAnsweredCount === 0 ? 3 : alreadyAnsweredCount === 1 ? 2 : 1;
-      playSound('win');
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg?.initDataUnsafe?.user) {
+      telegramService.notifyRoomCreated(tg.initDataUnsafe.user, newRoomId);
     }
+  };
 
-    const updatedPlayers = gameState.players.map(p => 
-      p.id === currentPlayer.id ? { ...p, currentVote: option, points: p.points + pointsToAdd } : p
-    );
+  const startNextRound = async () => {
+    if (!room) return;
+    setLoading(true);
+    try {
+      const challenge = await geminiService.generateChallenge(ChallengeType.TRIVIA);
+      const updatedRoom: RoomState = {
+        ...room,
+        status: 'playing',
+        currentChallenge: challenge,
+        timeLeft: ROUND_TIME,
+        round: room.round + 1,
+        players: room.players.map(p => ({ ...p, currentVote: undefined }))
+      };
+      await storageService.saveRoom(updatedRoom);
+      setRoom(updatedRoom);
+    } catch (err) {
+      setError('فشل في إنشاء التحدي. حاول مرة أخرى.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const updatedRoom: RoomState = { ...gameState, players: updatedPlayers };
-    setGameState(updatedRoom);
-    setCurrentPlayer(prev => prev ? { ...prev, points: prev.points + pointsToAdd, currentVote: option } : null);
+  const submitAnswer = async (answer: string) => {
+    if (!room || room.status !== 'playing') return;
+    
+    const isCorrect = answer === room.currentChallenge?.correctAnswer;
+    const pointsToAdd = isCorrect ? (room.timeLeft > 10 ? 3 : 1) : 0;
+
+    const updatedRoom: RoomState = {
+      ...room,
+      players: room.players.map(p => 
+        p.id === playerId 
+          ? { ...p, points: p.points + pointsToAdd, currentVote: answer } 
+          : p
+      )
+    };
+
+    setRoom(updatedRoom);
     await storageService.saveRoom(updatedRoom);
   };
 
-  if (!gameState) {
+  if (!room) {
     return (
-      <div className="flex flex-col items-center justify-start p-4 space-y-6 max-w-sm mx-auto pt-8">
-        <div className="text-center space-y-1">
-          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">مجلس التحدي</h1>
-          <p className="text-slate-400 text-xs font-medium italic">أهلاً بك يا {nameInput}</p>
-        </div>
+      <div className="flex flex-col items-center justify-start min-h-screen p-4 safe-top bg-[#0f172a] text-white">
+        <header className="w-full py-6 text-center">
+          <h1 className="text-4xl font-black text-blue-500 mb-2 drop-shadow-lg">مجلس التحدي</h1>
+          <p className="text-slate-400 text-sm">لعبة الذكاء والجماعات الأكثر متعة</p>
+        </header>
 
-        <div className="glass w-full p-6 rounded-2xl shadow-xl space-y-4">
-          <div className="flex flex-col items-center">
-            <img src={selectedAvatar.startsWith('http') ? selectedAvatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedAvatar}`} className="w-20 h-20 rounded-full border-2 border-blue-500 bg-slate-800 p-1 mb-2 shadow-inner" alt="Avatar"/>
-            {!selectedAvatar.startsWith('http') && <button onClick={() => setSelectedAvatar(`seed-${Math.random()}`)} className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">تغيير الصورة</button>}
-          </div>
-          
-          <input type="text" placeholder="اسمك..." className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-2 text-center font-bold text-white text-sm" value={nameInput} onChange={(e) => setNameInput(e.target.value)}/>
-          
-          <div className="space-y-2">
-            <button onClick={createRoom} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-lg active:scale-95 text-sm transition-all">أنشئ مجلساً جديداً</button>
+        <div className="w-full max-w-md glass rounded-3xl p-6 shadow-2xl mt-4">
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-blue-400 mr-2 uppercase tracking-widest">اسم البطل</label>
+              <input 
+                type="text" 
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="أدخل اسمك هنا..."
+                className="w-full bg-slate-900/50 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+            </div>
+
+            <button 
+              onClick={createRoom}
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 py-4 rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-3"
+            >
+              {loading ? (
+                <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <span>إنشاء مجلس جديد</span>
+                  <span className="text-2xl">🚀</span>
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-4 py-2">
+              <div className="h-px flex-1 bg-white/10"></div>
+              <span className="text-slate-500 text-xs font-bold uppercase">أو</span>
+              <div className="h-px flex-1 bg-white/10"></div>
+            </div>
+
             <div className="flex gap-2">
-              <input type="text" placeholder="كود المجلس" className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-4 py-2 text-center uppercase text-white text-sm" value={roomInput} onChange={(e) => setRoomInput(e.target.value)}/>
-              <button onClick={joinRoom} disabled={loading} className="bg-purple-600 px-4 py-2 rounded-lg font-bold text-white text-sm">دخول</button>
+              <input 
+                type="text" 
+                placeholder="كود المجلس"
+                className="flex-1 bg-slate-900/50 border border-white/10 rounded-2xl px-4 py-3 text-center font-mono text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button className="bg-slate-800 px-6 rounded-2xl font-bold hover:bg-slate-700 transition-colors border border-white/5">دخول</button>
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
 
-  if (gameState.status === 'lobby') {
-    return (
-      <div className="p-4 flex flex-col space-y-4 h-full">
-        <div className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-white/5 shadow-md">
-          <div onClick={() => { if(tg) tg.switchInlineQuery(gameState.roomId); }} className="cursor-pointer">
-            <h2 className="text-[10px] text-slate-400">كود المجلس (انقر للمشاركة)</h2>
-            <p className="text-xl font-black text-blue-400 tracking-widest">{gameState.roomId} 🔗</p>
-          </div>
-          <div className="text-right">
-            <h2 className="text-[10px] text-slate-400">اللاعبين</h2>
-            <p className="text-xl font-black text-white">{gameState.players.length}</p>
-          </div>
-        </div>
-
-        <div className="flex-1 glass rounded-2xl p-4 overflow-y-auto min-h-0">
-          <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            في انتظار البقية...
-          </h3>
-          <div className="grid grid-cols-4 gap-4">
-            {gameState.players.map(player => (
-              <PlayerAvatar key={player.id} name={player.name} avatar={player.avatar} isHost={player.isHost} size="sm" />
-            ))}
-          </div>
-        </div>
-
-        {currentPlayer?.isHost ? (
-          <button onClick={startNextRound} disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-black py-4 rounded-xl shadow-xl text-lg active:scale-95 transition-all">
-            {loading ? 'جاري التجهيز...' : 'ابدأ التحدي!'}
-          </button>
-        ) : (
-          <div className="bg-slate-800/80 p-3 rounded-xl text-center border border-blue-500/20">
-            <p className="text-blue-300 text-xs font-bold animate-pulse">بانتظار المضيف ليبدأ...</p>
-          </div>
-        )}
+        <footer className="mt-auto py-8 text-center text-slate-600 text-[10px] uppercase tracking-widest">
+          متصل عبر خوادم آمنة • تحديات مدعومة بالذكاء الاصطناعي
+        </footer>
       </div>
     );
   }
 
   return (
-    <div className="p-3 flex flex-col space-y-3 h-full">
-      <div className="flex justify-between items-center">
-        <div className="bg-slate-800 px-3 py-0.5 rounded-full border border-white/10">
-          <span className="text-[10px] text-slate-400 ml-1">جولة</span>
-          <span className="font-bold text-sm text-blue-400">{gameState.round}</span>
+    <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-[#0f172a] text-white safe-top">
+      {/* Top Bar - Very Compact */}
+      <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <div className="bg-blue-600 text-[10px] px-2 py-0.5 rounded-full font-bold"># {room.roomId}</div>
+          <span className="text-xs font-bold text-slate-400">الجولة {room.round}</span>
         </div>
-        <div className="bg-blue-600/20 px-3 py-0.5 rounded-full border border-blue-500/30">
-          <span className="text-blue-400 font-bold text-xs">{currentPlayer?.points} نقطة</span>
+        <div className="flex -space-x-2 rtl:space-x-reverse">
+          {room.players.slice(0, 5).map(p => (
+            <div key={p.id} className="w-6 h-6 rounded-full border border-slate-900 bg-slate-800 overflow-hidden">
+              <img src={p.avatar} alt={p.name} className="w-full h-full" />
+            </div>
+          ))}
+          {room.players.length > 5 && (
+            <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-900 flex items-center justify-center text-[8px] font-bold">
+              +{room.players.length - 5}
+            </div>
+          )}
         </div>
       </div>
 
-      <Timer timeLeft={gameState.timeLeft} totalTime={ROUND_TIME} />
-
-      <main className="flex-1 flex flex-col items-center justify-start pt-2">
-        <div className="glass w-full max-w-sm p-5 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col">
-          <div className="absolute top-3 left-3 bg-purple-600 text-[8px] px-2 py-0.5 rounded-full font-bold uppercase">
-            {gameState.currentChallenge?.type}
-          </div>
-
-          <div className="text-center space-y-2 mt-4">
-            <h2 className="text-lg font-black text-white">{gameState.currentChallenge?.title}</h2>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {room.status === 'lobby' && (
+          <div className="text-center space-y-6 py-8">
+            <div className="animate-bounce inline-block bg-blue-500/10 p-4 rounded-full">
+              <span className="text-4xl">👥</span>
+            </div>
+            <h2 className="text-2xl font-bold">في انتظار اللاعبين...</h2>
+            <p className="text-slate-400 text-sm">شارك الكود <span className="text-blue-400 font-mono font-bold">{room.roomId}</span> ليبدأ أصدقاؤك بالانضمام</p>
             
-            {gameState.status === 'playing' ? (
-              <div className="space-y-4 pt-2">
-                <div className="text-sm font-bold text-blue-100 bg-slate-900/60 p-4 rounded-xl border border-blue-500/2
+            <div className="grid grid-cols-3 gap-4 pt-4">
+              {room.players.map(p => (
+                <PlayerAvatar key={p.id} name={p.name} avatar={p.avatar} isHost={p.isHost} size="md" />
+              ))}
+            </div>
+
+            {room.players.find(p => p.id === playerId)?.isHost && (
+              <button 
+                onClick={startNextRound}
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-bold text-lg shadow-xl shadow-green-500/20"
+              >
+                {loading ? 'جاري التحميل...' : 'ابدأ اللعبة الآن!'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {room.status === 'playing' && (
+          <div className="space-y-6">
+            <Timer timeLeft={room.timeLeft} totalTime={ROUND_TIME} />
+            
+            <div className="glass rounded-3xl p-6 text-center space-y-4 shadow-xl border-t border-white/10">
+              <h3 className="text-blue-400 text-xs font-black uppercase tracking-[0.2em]">تحدي الـ Trivia</h3>
+              <h2 className="text-xl font-bold leading-relaxed">{room.currentChallenge?.question}</h2>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {room.currentChallenge?.options?.map((option, idx) => {
+                const isSelected = room.players.find(p => p.id === playerId)?.currentVote === option;
+                return (
+                  <button 
+                    key={idx}
+                    onClick={() => submitAnswer(option)}
+                    disabled={!!room.players.find(p => p.id === playerId)?.currentVote}
+                    className={`w-full py-4 px-6 rounded-2xl text-right font-bold transition-all border-2 flex items-center justify-between
+                      ${isSelected 
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
+                        : 'bg-slate-800/50 border-white/5 hover:border-white/20'}`}
+                  >
+                    <span>{option}</span>
+                    {isSelected && <span className="text-xl">✅</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {room.status === 'round_end' && (
+          <div className="space-y-6 text-center">
+            <h2 className="text-3xl font-black text-yellow-500">انتهى الوقت!</h2>
+            <div className="glass rounded-3xl p-6 space-y-4">
+              <p className="text-slate-400">الإجابة الصحيحة هي:</p>
+              <div className="bg-green-500/20 text-green-400 py-3 px-6 rounded-2xl border border-green-500/30 text-xl font-bold">
+                {room.currentChallenge?.correctAnswer}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-500 text-right mr-2">ترتيب اللاعبين</h4>
+              {room.players.sort((a,b) => b.points - a.points).map((p, idx) => (
+                <div key={p.id} className="flex items-center justify-between bg-slate-800/40 p-3 rounded-2xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${idx === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700'}`}>
+                      {idx + 1}
+                    </span>
+                    <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full" />
+                    <span className="font-bold text-sm">{p.name}</span>
+                  </div>
+                  <span className="text-blue-400 font-bold">{p.points}</span>
+                </div>
+              ))}
+            </div>
+
+            {room.players.find(p => p.id === playerId)?.isHost && (
+              <button 
+                onClick={startNextRound}
+                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold shadow-lg"
+              >
+                الجولة التالية ➡️
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Persistent Player Status Bottom - For Mobile feel */}
+      <div className="p-4 glass border-t border-white/10 safe-bottom">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full border-2 border-blue-500 p-0.5">
+              <img src={room.players.find(p => p.id === playerId)?.avatar} className="w-full h-full rounded-full" />
+            </div>
+            <div>
+              <p className="text-xs font-bold">{playerName}</p>
+              <p className="text-[10px] text-blue-400 font-black">{room.players.find(p => p.id === playerId)?.points} نقطة</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="text-[10px] font-bold text-red-400 uppercase tracking-tighter"
+          >
+            خروج من الغرفة
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
