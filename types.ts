@@ -1,4 +1,5 @@
 
+// Add TEAM_WAR to the enum to satisfy its usage in geminiService.ts
 export enum ChallengeType {
   TRIVIA = 'trivia',
   UNDERCOVER = 'undercover',
@@ -18,9 +19,9 @@ export interface Player {
   isHost: boolean;
   isAlive: boolean;
   currentVote?: string;
-  voteTime?: number; 
-  role?: 'spy' | 'citizen' | 'team_a' | 'team_b';
+  role?: 'spy' | 'citizen';
   targetWord?: string;
+  lastSeen: number; // للمزامنة والتأكد من تواجد اللاعب
 }
 
 export interface Challenge {
@@ -38,8 +39,9 @@ export interface RoomState {
   roomId: string;
   players: Player[];
   round: number;
-  status: 'lobby' | 'starting' | 'playing' | 'round_end' | 'game_over';
+  status: 'lobby' | 'playing' | 'round_end';
   currentChallenge?: Challenge;
   timeLeft: number;
-  history: any[];
+  gamePhase?: 'discussing' | 'voting';
+  serverTime: number; // لمزامنة الوقت بين اللاعبين
 }
