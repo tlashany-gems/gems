@@ -10,32 +10,33 @@ interface Props {
 }
 
 export const PlayerAvatar: React.FC<Props> = ({ name, avatar, points, isHost, size = 'md' }) => {
-  const sizeClass = size === 'sm' ? 'w-10 h-10' : size === 'lg' ? 'w-20 h-20' : 'w-14 h-14';
+  const sizeClass = size === 'sm' ? 'w-10 h-10' : size === 'lg' ? 'w-16 h-16' : 'w-12 h-12';
   
   return (
-    <div className="flex flex-col items-center group cursor-pointer">
+    <div className="flex flex-col items-center group">
       <div className={`
-        relative ${sizeClass} rounded-2xl overflow-visible transition-all duration-300 
-        group-hover:scale-110 group-active:scale-95
-        ${isHost ? 'border-2 border-yellow-400 animate-gold shadow-[0_0_10px_rgba(251,191,36,0.4)]' : 'border border-white/20'}
+        relative ${sizeClass} rounded-xl transition-all duration-200 
+        group-hover:scale-110 active:scale-90
+        ${isHost ? 'border-[1.5px] border-yellow-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'border border-white/10'}
         bg-slate-800 p-0.5
       `}>
         <img 
           src={avatar} 
           alt={name}
-          className="w-full h-full object-cover rounded-xl"
+          className="w-full h-full object-cover rounded-lg"
         />
         {isHost && (
-          <div className="absolute -top-2 -right-2 bg-yellow-500 text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-lg border border-yellow-200">
+          <div className="absolute -top-1.5 -right-1.5 bg-yellow-500 text-[8px] w-4 h-4 rounded-full flex items-center justify-center shadow-lg">
             👑
           </div>
         )}
       </div>
-      <div className="mt-1.5 max-w-[60px]">
-        <p className="text-[9px] font-black text-white truncate text-center bg-black/30 px-2 py-0.5 rounded-full">
-          {name}
-        </p>
-      </div>
+      <p className="mt-1 text-[8px] font-black text-white truncate w-full text-center bg-black/40 px-1 py-0.5 rounded">
+        {name}
+      </p>
+      {points !== undefined && (
+        <span className="text-[7px] text-yellow-500 font-bold">{points} XP</span>
+      )}
     </div>
   );
 };
