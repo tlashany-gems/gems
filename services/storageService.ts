@@ -1,44 +1,51 @@
 
 import { RoomState, Player } from '../types';
 
-// استخدام مفتاح فريد للتطبيق لضمان عدم تداخل الغرف مع تطبيقات أخرى
-const BUCKET_ID = 'challenge_council_v1_prod'; 
+// استخدام معرف فريد لضمان استقرار الخدمة
+const BUCKET_ID = 'vip_council_live_v2'; 
 const BASE_URL = `https://kvdb.io/${BUCKET_ID}/`;
 
 export const storageService = {
-  // حفظ حالة الغرفة في السحاب
   saveRoom: async (room: RoomState): Promise<void> => {
     try {
-      const updatedRoom = { ...room, serverTime: Date.now() };
-      await fetch(`${BASE_URL}${room.roomId}`, {
-        method: 'POST',
-        body: JSON.stringify(updatedRoom)
+      // kvdb.io يتطلب PUT لتخزين أو تحديث مفتاح
+      const response = await fetch(`${BASE_URL}${room.roomId.toUpperCase()}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...room, serverTime: Date.now() })
       });
+      if (!response.ok) throw new Error('Failed to save to cloud');
     } catch (e) {
-      console.error("Cloud Save Error:", e);
+      console.error("Cloud Storage Error (Save):", e);
     }
   },
 
-  // جلب حالة الغرفة من السحاب
   getRoom: async (roomId: string): Promise<RoomState | null> => {
     try {
       const response = await fetch(`${BASE_URL}${roomId.toUpperCase()}`);
       if (!response.ok) return null;
-      return await response.json();
+      const data = await response.json();
+      return data as RoomState;
     } catch (e) {
+      console.error("Cloud Storage Error (Get):", e);
       return null;
     }
   },
 
-  // انضمام لاعب جديد للغرفة السحابية
   joinRoom: async (roomId: string, player: Player): Promise<RoomState | null> => {
     const room = await storageService.getRoom(roomId);
     if (!room) return null;
 
     const exists = room.players.find(p => p.id === player.id);
     if (!exists) {
-      room.players.push(player);
-      await storageService.saveRoom(room);
+      // التأكد من عدم تجاوز الحد الأقصى للاعبين في العرض
+      const updatedRoom = { 
+        ...room, 
+        players: [...room.players, player],
+        serverTime: Date.now()
+      };
+      await storageService.saveRoom(updatedRoom);
+      return updatedRoom;
     }
     return room;
   }
