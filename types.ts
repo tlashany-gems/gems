@@ -13,9 +13,14 @@ export interface Player {
   name: string;
   avatar: string;
   points: number;
+  roundPoints: number; 
+  roundPointsLabel?: string; 
   isHost: boolean;
   isAlive: boolean;
   currentVote?: string;
+  voteTime?: number; 
+  role?: 'spy' | 'citizen' | 'team_a' | 'team_b';
+  targetWord?: string;
 }
 
 export interface Challenge {
@@ -25,8 +30,8 @@ export interface Challenge {
   question?: string;
   options?: string[];
   correctAnswer?: string;
-  secretWord?: string; // For Undercover
-  spyWord?: string;    // For Undercover
+  secretWord?: string; 
+  spyWord?: string;    
 }
 
 export interface RoomState {

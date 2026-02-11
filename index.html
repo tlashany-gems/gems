@@ -4,44 +4,70 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>مجلس التحدي</title>
+    <title>مجلس التحدي - VIP</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
       :root {
-        --tg-theme-bg-color: #0f172a;
-        --tg-theme-text-color: #ffffff;
+        --ludo-blue: #1e3a8a;
+        --ludo-gold: #fbbf24;
+        --ludo-bg: #0f172a;
       }
       body {
         font-family: 'Cairo', sans-serif;
-        background-color: #0f172a;
+        background-color: var(--ludo-bg);
         color: white;
         margin: 0;
         padding: 0;
-        overflow-x: hidden;
-        min-height: 100vh;
-        min-height: 100dvh;
+        overflow: hidden;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
-      #root {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
+      .glass-ludo {
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(251, 191, 36, 0.2);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
       }
-      .glass {
-        background: rgba(30, 41, 59, 0.7);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+      .gold-border {
+        border: 2px solid #fbbf24;
+        box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+      }
+      .btn-ludo-gold {
+        background: linear-gradient(to bottom, #fcd34d, #d97706);
+        color: #451a03;
+        text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+        box-shadow: 0 4px 0 #92400e, 0 8px 15px rgba(0,0,0,0.4);
+      }
+      .btn-ludo-blue {
+        background: linear-gradient(to bottom, #3b82f6, #1d4ed8);
+        box-shadow: 0 4px 0 #1e3a8a, 0 8px 15px rgba(0,0,0,0.4);
       }
       .safe-top { padding-top: env(safe-area-inset-top); }
       .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
       
-      @keyframes spin { to { transform: rotate(360deg); } }
-      .animate-spin-slow { animation: spin 3s linear infinite; }
+      @keyframes pulse-gold {
+        0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+      }
+      .animate-gold { animation: pulse-gold 2s infinite; }
 
-      /* تحسين استجابة الأزرار في اللمس */
-      button:active { transform: scale(0.95); }
+      /* خلفية الجرافيك الذي زودتني به */
+      .game-bg-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url('https://i.postimg.cc/wxV3PspQ/1756574872401.gif');
+        background-size: cover;
+        background-position: center;
+        opacity: 0.15;
+        z-index: -1;
+        pointer-events: none;
+      }
     </style>
     <script type="importmap">
 {
@@ -58,12 +84,8 @@
   <link rel="stylesheet" href="/index.css">
 </head>
   <body>
-    <div id="root">
-      <div style="display: flex; height: 100vh; align-items: center; justify-content: center; flex-direction: column; gap: 15px; background: #0f172a;">
-        <div style="width: 40px; height: 40px; border: 4px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-        <p style="font-family: 'Cairo', sans-serif; color: #3b82f6; font-size: 14px;">جاري تشغيل المجلس...</p>
-      </div>
-    </div>
+    <div class="game-bg-overlay"></div>
+    <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>
