@@ -1,8 +1,0 @@
-{
-  "name": "مجلس التحدي - Challenge Council",
-  "description": "لعبة جماعية تفاعلية تدعم حتى 100 لاعب، مع تحديات ذكاء، قصص جماعية، وألعاب اجتماعية مبتكرة.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}
