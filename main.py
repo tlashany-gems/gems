@@ -17,7 +17,7 @@ MAX_CARDS      = 2
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
 ACCOUNTS = [
-    {"phone": "01008967492", "password": "##1122334455"},
+    {"phone": "01008967492", "password": "##1122334455Qq"},
     {"phone": "01018529827", "password": "1052003Mm@#$"},
     {"phone": "01003971136", "password": "1052003Mm$#@"},
 ]
@@ -339,3 +339,4 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
+
