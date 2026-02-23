@@ -5,6 +5,8 @@ import hashlib
 import urllib.request
 import urllib.parse
 import ssl
+import threading
+from flask import Flask, request, redirect
 
 # ══════════════════════════════════════════
 #  CONFIG
@@ -17,6 +19,12 @@ CHECK_INTERVAL = 15
 MIN_GIFT       = 85
 MAX_CARDS      = 2
 
+# ✅ رابط السيرفر بتاعك على Railway
+PUBLIC_URL = "https://gems-production-ac3f.up.railway.app"
+
+# ✅ Railway بيحدد PORT تلقائياً من env
+SERVER_PORT = int(os.environ.get("PORT", 5000))
+
 STATE_FILE  = "bot_state.json"
 OFFSET_FILE = "tg_offset.txt"
 TG_URL      = f"https://api.telegram.org/bot{BOT_TOKEN}/"
@@ -28,6 +36,30 @@ LAST_RESPONSE_HASH = None
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode    = ssl.CERT_NONE
+
+# ══════════════════════════════════════════
+#  FLASK SERVER
+# ══════════════════════════════════════════
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "✅ TALASHNY Server Running", 200
+
+@flask_app.route("/recharge")
+def recharge():
+    serial = request.args.get("serial", "").strip()
+    serial = "".join(c for c in serial if c.isdigit())
+
+    if len(serial) != 13:
+        return "❌ رقم الكارت غلط", 400
+
+    ussd = f"*858*{serial}#"
+    tel  = "tel:" + urllib.parse.quote(ussd, safe="")
+    return redirect(tel, code=302)
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=SERVER_PORT, use_reloader=False)
 
 # ══════════════════════════════════════════
 #  LOGGER
@@ -108,7 +140,6 @@ def vf_login():
         log("ERR", f"vf_login: {e}")
         return None, 0
 
-
 def get_token():
     global CURRENT_TOKEN, TOKEN_EXPIRY
     if CURRENT_TOKEN and time.time() < TOKEN_EXPIRY:
@@ -119,7 +150,6 @@ def get_token():
         CURRENT_TOKEN = token
         TOKEN_EXPIRY  = expiry
     return token
-
 
 def vf_promos(token):
     try:
@@ -152,16 +182,14 @@ def vf_promos(token):
                     if not c:
                         continue
 
-                    # ✅ فلتر الـ gift أولاً قبل أي حاجة تانية
                     try:
                         gift = int(c.get("GIFT_UNITS", 0))
                     except:
                         continue
 
                     if gift < MIN_GIFT:
-                        continue  # تجاهل فوراً بدون ما نفحص الـ serial
+                        continue
 
-                    # ✅ بس دلوقتي نفحص الـ serial (بس على الكروت اللي عدت الفلتر)
                     serial = str(c.get("CARD_SERIAL", "")).strip()
                     if len(serial) != 13:
                         log("WARN", f"⚠️ Skip serial [{serial}] ({len(serial)} digits)")
@@ -180,7 +208,6 @@ def vf_promos(token):
                         "remaining": remaining,
                     })
 
-        # ترتيب: أعلى gift أولاً ثم أعلى amount
         cards.sort(key=lambda x: (x["gift"], x["amount"]), reverse=True)
         log("INFO", f"✅ {len(cards)} cards passed gift >= {MIN_GIFT} filter")
         return raw_text, cards
@@ -188,7 +215,6 @@ def vf_promos(token):
     except Exception as e:
         log("WARN", f"vf_promos: {e}")
         return None, []
-
 
 def best_cards(cards):
     return cards[:MAX_CARDS]
@@ -199,7 +225,10 @@ def best_cards(cards):
 def build_msg(card):
     serial = str(card["serial"]).strip()
     ussd   = "*858*" + serial + "#"
-    text   = f"""
+
+    recharge_url = f"{PUBLIC_URL}/recharge?serial={serial}"
+
+    text = f"""
 ╭────═⟃TALASHNY⟄═────╮
 │            *Vodafone Card*
 │╭────✦───✦───╮
@@ -211,7 +240,17 @@ def build_msg(card):
 ╞╡*Recharge Code:* `{ussd}`   
 │╰──────✦──────────╯
 ╰────═⟃TALASHNY⟄═────╯"""
-    return text, None
+
+    keyboard = {
+        "inline_keyboard": [[
+            {
+                "text": "📞 شحن الآن",
+                "url": recharge_url
+            }
+        ]]
+    }
+
+    return text, keyboard
 
 # ══════════════════════════════════════════
 #  STATE
@@ -265,7 +304,6 @@ def check_and_update():
     if raw_text is None:
         return
 
-    # Hash check
     current_hash = hashlib.md5(raw_text.encode()).hexdigest()
     if current_hash == LAST_RESPONSE_HASH:
         log("INFO", "⚡ No changes")
@@ -278,7 +316,6 @@ def check_and_update():
     target_map = {c["serial"]: c for c in target}
     state      = load_state()
 
-    # احذف الكروت اللي مش ضمن أفضل 2 أو خلصت
     for mid in list(state.keys()):
         serial = state[mid]["serial"]
         live   = target_map.get(serial)
@@ -287,7 +324,6 @@ def check_and_update():
             del state[mid]
             log("INFO", f"🗑️ Deleted {mid}")
 
-    # حدّث الـ remaining
     for mid, cd in list(state.items()):
         live = target_map.get(cd["serial"])
         if live and live["remaining"] != cd["remaining"]:
@@ -298,7 +334,6 @@ def check_and_update():
                parse_mode="Markdown", reply_markup=kb)
             log("INFO", f"✏️ Updated {mid}")
 
-    # ابعت الجديدة
     sent = {v["serial"] for v in state.values()}
     for serial, card in target_map.items():
         if len(state) >= MAX_CARDS:
@@ -306,7 +341,8 @@ def check_and_update():
         if serial not in sent and card["remaining"] > 0:
             txt, kb = build_msg(card)
             res = tg("sendMessage", chat_id=CHANNEL_ID,
-                     text=txt, parse_mode="Markdown")
+                     text=txt, parse_mode="Markdown",
+                     reply_markup=kb)
             if res and "message_id" in res:
                 state[str(res["message_id"])] = card.copy()
                 log("INFO", f"📤 Sent [{serial}] gift={card['gift']}")
@@ -318,7 +354,12 @@ def check_and_update():
 #  MAIN
 # ══════════════════════════════════════════
 if __name__ == "__main__":
-    log("INFO", "🚀 TALASHNY | gift filter first → serial check | low RAM")
+    log("INFO", "🚀 TALASHNY | Bot + Server on Railway")
+
+    # ✅ Flask في thread منفصل
+    t = threading.Thread(target=run_flask, daemon=True)
+    t.start()
+    log("INFO", f"🌐 Flask running on port {SERVER_PORT}")
 
     token, expiry = vf_login()
     if token:
