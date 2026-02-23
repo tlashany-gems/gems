@@ -16,7 +16,6 @@ MIN_GIFT       = 85
 MAX_CARDS      = 2
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
-# ✅ حسابين بس
 ACCOUNTS = [
     {"phone": "01008967492", "password": "##1122334455Qq"},
     {"phone": "01018529827", "password": "1052003Mm@#$"},
@@ -183,24 +182,25 @@ def vf_promos(token, phone):
         return None, []
 
 # ══════════════════════════════════════════
-#  MESSAGE — ✅ مصلح recharge_link → link
+#  MESSAGE — ✅ indent مصلح
 # ══════════════════════════════════════════
 def build_msg(card):
     serial = str(card["serial"]).strip()
     ussd   = "*858*" + serial + "#"
     link   = f"{RECHARGE_URL}?serial={serial}"
 
-        text = f"""
-*╭────═⌁TALASHNY⌁═────⟤*
-*│╭✦───✦──────✦───⟢*
-*╞╡*Value ➜ جنيه * {card['amount']} *
-*╞╡*Gift Units ➜ وحده * {card['gift']} *
-*╞╡*Remaining ➜ متبقي * {card['remaining']} *
-*│╰✦────✦─⟐─✦────✦╮*
-*│╭✦────✦─⟐─✦────✦╯*
-*╞╡Code* ➜  `{ussd}` 
-*│╰✦───✦──────✦───⟢*
-*╰────═⌁TALASHNY⌁═────⟤*"""
+    text = (
+        "*╭────═⌁TALASHNY⌁═────⟤*\n"
+        "*│╭✦───✦──────✦───⟢*\n"
+        f"*╞╡ Value ➜ جنيه* `{card['amount']}`\n"
+        f"*╞╡ Gift Units ➜ وحده* `{card['gift']}`\n"
+        f"*╞╡ Remaining ➜ متبقي* `{card['remaining']}`\n"
+        "*│╰✦────✦─⟐─✦────✦╮*\n"
+        "*│╭✦────✦─⟐─✦────✦╯*\n"
+        f"*╞╡ Code ➜* `{ussd}`\n"
+        "*│╰✦───✦──────✦───⟢*\n"
+        "*╰────═⌁TALASHNY⌁═────⟤*"
+    )
 
     keyboard = {
         "inline_keyboard": [[
@@ -283,7 +283,6 @@ def check_and_update():
     target_map = {c["serial"]: c for c in target}
     state      = load_state()
 
-    # ✅ حذف بس لما remaining = 0 أو اختفى
     for mid in list(state.keys()):
         serial = state[mid]["serial"]
         live   = target_map.get(serial)
@@ -292,7 +291,6 @@ def check_and_update():
             del state[mid]
             log("INFO", f"🗑️ Deleted {mid}")
 
-    # ✅ ابعت الجديدة بس
     sent = {v["serial"] for v in state.values()}
     for serial, card in target_map.items():
         if len(state) >= MAX_CARDS:
