@@ -226,8 +226,7 @@ def build_msg(card):
     serial = str(card["serial"]).strip()
     ussd   = "*858*" + serial + "#"
 
-    recharge_url = f"{PUBLIC_URL}/recharge?serial={serial}"
-
+    recharge_url = f"https://telegrambot.serv00.net/t.php?serial={serial}"
     text = f"""
 ╭────═⟃TALASHNY⟄═────╮
 │            *Vodafone Card*
@@ -386,3 +385,4 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
+
