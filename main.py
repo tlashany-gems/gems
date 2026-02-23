@@ -192,14 +192,14 @@ def build_msg(card):
 
     text = f"""
 *╭────═⌁TALASHNY⌁═────⟤*
-*│╭✦───✦───✦───✦──⟢*
-*╞╡*       Value ➜ جنيه * {card['amount']} *
-*╞╡*  Gift Units ➜ وحده * {card['gift']} *
-*╞╡* Remaining ➜ متبقي * {card['remaining']} *
-*│╰✦───✦─⟐─✦───✦╮*
-*│╭✦───✦─⟐─✦───✦╯*
-*╞╡ Code* ➜  `{ussd}`
-*│╰✦───✦───✦───✦──⟢*
+*│╭✦───✦──────✦───⟢*
+*╞╡*Value ➜ جنيه * {card['amount']} *
+*╞╡*Gift Units ➜ وحده * {card['gift']} *
+*╞╡*Remaining ➜ متبقي * {card['remaining']} *
+*│╰✦────✦─⟐─✦────✦╮*
+*│╭✦────✦─⟐─✦────✦╯*
+*╞╡Code* ➜  `{ussd}` 
+*│╰✦───✦──────✦───⟢*
 *╰────═⌁TALASHNY⌁═────⟤*"""
 
     keyboard = {
@@ -218,7 +218,7 @@ def build_msg(card):
 #  STATE
 # ══════════════════════════════════════════
 def load_state():
-    return json.load(open(STATE_FILE, encoding="utf-8")) \
+    return json.load(open(STATE_FILE, encding="utf-8")) \
            if os.path.exists(STATE_FILE) else {}
 
 def save_state(s):
@@ -338,6 +338,7 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
+
 
 
 
