@@ -217,7 +217,7 @@ def build_msg(card):
             {
                 "text":  "📞 شحن الآن",
                 "url":   recharge_link,
-                "style": "primary"
+                "style": "success"
             }
         ]]
     }
@@ -353,3 +353,4 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
+
