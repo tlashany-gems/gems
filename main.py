@@ -16,10 +16,10 @@ MIN_GIFT       = 85
 MAX_CARDS      = 2
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
+# ✅ حسابين بس
 ACCOUNTS = [
-    {"phone": "01008967492", "password": "##1122334455Qq"},
-    {"phone": "01018529827", "password": "1052003Mm@#$"},
     {"phone": "01003971136", "password": "1052003Mm$#@"},
+    {"phone": "01018529827", "password": "1052003Mm@#$"},
 ]
 
 STATE_FILE  = "bot_state.json"
@@ -183,7 +183,7 @@ def vf_promos(token, phone):
         return None, []
 
 # ══════════════════════════════════════════
-#  MESSAGE
+#  MESSAGE — ✅ مصلح recharge_link → link
 # ══════════════════════════════════════════
 def build_msg(card):
     serial = str(card["serial"]).strip()
@@ -205,9 +205,9 @@ def build_msg(card):
 
     keyboard = {
         "inline_keyboard": [[
-            
-            {"text":  "✦ اضغط لشحن اسرع ✦",
-                "url":   recharge_link,
+            {
+                "text":  "✦ اضغط لشحن اسرع ✦",
+                "url":   link,
                 "style": "success"
             }
         ]]
@@ -252,14 +252,14 @@ def handle_callbacks():
             save_offset(upd["update_id"] + 1)
 
 # ══════════════════════════════════════════
-#  MAIN CHECK — بس حذف لما remaining = 0
+#  MAIN CHECK
 # ══════════════════════════════════════════
 def check_and_update():
     global CURRENT_ACCOUNT, LAST_RESPONSE_HASH
 
     idx   = CURRENT_ACCOUNT
     phone = ACCOUNTS[idx]["phone"]
-    log("INFO", f"🔄 [{idx+1}/3] {phone}")
+    log("INFO", f"🔄 [{idx+1}/2] {phone}")
 
     CURRENT_ACCOUNT = (CURRENT_ACCOUNT + 1) % len(ACCOUNTS)
 
@@ -284,16 +284,16 @@ def check_and_update():
     target_map = {c["serial"]: c for c in target}
     state      = load_state()
 
-    # ✅ احذف بس لما remaining = 0 أو الكارت اختفى من الـ API
+    # ✅ حذف بس لما remaining = 0 أو اختفى
     for mid in list(state.keys()):
         serial = state[mid]["serial"]
         live   = target_map.get(serial)
         if not live or live["remaining"] <= 0:
             tg("deleteMessage", chat_id=CHANNEL_ID, message_id=int(mid))
             del state[mid]
-            log("INFO", f"🗑️ Deleted {mid} — خلصت")
+            log("INFO", f"🗑️ Deleted {mid}")
 
-    # ✅ ابعت الكروت الجديدة بس — مش editMessage خالص
+    # ✅ ابعت الجديدة بس
     sent = {v["serial"] for v in state.values()}
     for serial, card in target_map.items():
         if len(state) >= MAX_CARDS:
@@ -314,7 +314,7 @@ def check_and_update():
 #  MAIN
 # ══════════════════════════════════════════
 if __name__ == "__main__":
-    log("INFO", "🚀 TALASHNY | 3 accounts | 5s | light mode | success button")
+    log("INFO", "🚀 TALASHNY | 2 accounts | 5s | light | success button")
 
     for i in range(len(ACCOUNTS)):
         vf_login(i)
@@ -339,4 +339,3 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
-
