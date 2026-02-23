@@ -18,7 +18,7 @@ RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
 # ✅ حسابين بس
 ACCOUNTS = [
-    {"phone": "01003971136", "password": "1052003Mm$#@"},
+    {"phone": "01008967492", "password": "##1122334455Qq"},
     {"phone": "01018529827", "password": "1052003Mm@#$"},
 ]
 
@@ -190,7 +190,7 @@ def build_msg(card):
     ussd   = "*858*" + serial + "#"
     link   = f"{RECHARGE_URL}?serial={serial}"
 
-    text = f"""
+        text = f"""
 *╭────═⌁TALASHNY⌁═────⟤*
 *│╭✦───✦──────✦───⟢*
 *╞╡*Value ➜ جنيه * {card['amount']} *
@@ -205,7 +205,7 @@ def build_msg(card):
     keyboard = {
         "inline_keyboard": [[
             {
-                "text":  "✦ اضغط لشحن اسرع ✦",
+                "text":  "⌁ اضغط لشحن اسرع ⌁",
                 "url":   link,
                 "style": "success"
             }
@@ -218,12 +218,12 @@ def build_msg(card):
 #  STATE
 # ══════════════════════════════════════════
 def load_state():
-    return json.load(open(STATE_FILE, encding="utf-8")) \
+    return json.load(open(STATE_FILE, encoding="utf-8")) \
            if os.path.exists(STATE_FILE) else {}
 
 def save_state(s):
-    json.dump(s, open(STATE_FILE, "w", encoding="utf-8"),
-              ensure_ascii=False, indent=2)
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, indent=2)
 
 def load_offset():
     return int(open(OFFSET_FILE).read().strip()) \
@@ -338,10 +338,3 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
-
-
-
-
-
-
-
