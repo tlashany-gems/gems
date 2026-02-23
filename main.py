@@ -5,8 +5,6 @@ import hashlib
 import urllib.request
 import urllib.parse
 import ssl
-import threading
-from flask import Flask, request, redirect
 
 # ══════════════════════════════════════════
 #  CONFIG
@@ -19,11 +17,7 @@ CHECK_INTERVAL = 15
 MIN_GIFT       = 85
 MAX_CARDS      = 2
 
-# ✅ رابط السيرفر بتاعك على Railway
-PUBLIC_URL = "https://gems-production-ac3f.up.railway.app"
-
-# ✅ Railway بيحدد PORT تلقائياً من env
-SERVER_PORT = int(os.environ.get("PORT", 5000))
+RECHARGE_URL = "https://telegrambot.serv00.net/recharge.php"
 
 STATE_FILE  = "bot_state.json"
 OFFSET_FILE = "tg_offset.txt"
@@ -36,30 +30,6 @@ LAST_RESPONSE_HASH = None
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode    = ssl.CERT_NONE
-
-# ══════════════════════════════════════════
-#  FLASK SERVER
-# ══════════════════════════════════════════
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "✅ TALASHNY Server Running", 200
-
-@flask_app.route("/recharge")
-def recharge():
-    serial = request.args.get("serial", "").strip()
-    serial = "".join(c for c in serial if c.isdigit())
-
-    if len(serial) != 13:
-        return "❌ رقم الكارت غلط", 400
-
-    ussd = f"*858*{serial}#"
-    tel  = "tel:" + urllib.parse.quote(ussd, safe="")
-    return redirect(tel, code=302)
-
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=SERVER_PORT, use_reloader=False)
 
 # ══════════════════════════════════════════
 #  LOGGER
@@ -220,13 +190,14 @@ def best_cards(cards):
     return cards[:MAX_CARDS]
 
 # ══════════════════════════════════════════
-#  MESSAGE
+#  MESSAGE — زر أخضر بـ style
 # ══════════════════════════════════════════
 def build_msg(card):
     serial = str(card["serial"]).strip()
     ussd   = "*858*" + serial + "#"
 
-    recharge_url = f"https://telegrambot.serv00.net/t.php?serial={serial}"
+    recharge_link = f"{RECHARGE_URL}?serial={serial}"
+
     text = f"""
 ╭────═⟃TALASHNY⟄═────╮
 │            *Vodafone Card*
@@ -240,11 +211,13 @@ def build_msg(card):
 │╰──────✦──────────╯
 ╰────═⟃TALASHNY⟄═────╯"""
 
+    # ✅ style: "primary" = أخضر في تيليجرام الجديد
     keyboard = {
         "inline_keyboard": [[
             {
-                "text": "📞 شحن الآن",
-                "url": recharge_url
+                "text":  "📞 شحن الآن",
+                "url":   recharge_link,
+                "style": "primary"
             }
         ]]
     }
@@ -353,12 +326,7 @@ def check_and_update():
 #  MAIN
 # ══════════════════════════════════════════
 if __name__ == "__main__":
-    log("INFO", "🚀 TALASHNY | Bot + Server on Railway")
-
-    # ✅ Flask في thread منفصل
-    t = threading.Thread(target=run_flask, daemon=True)
-    t.start()
-    log("INFO", f"🌐 Flask running on port {SERVER_PORT}")
+    log("INFO", "🚀 TALASHNY | style=primary green button")
 
     token, expiry = vf_login()
     if token:
@@ -385,4 +353,3 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
-
