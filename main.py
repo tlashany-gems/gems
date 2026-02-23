@@ -191,17 +191,17 @@ def build_msg(card):
     link   = f"{RECHARGE_URL}?serial={serial}"
 
     text = f"""
-╭────═⟃TALASHNY⟄═────╮
-│            *Vodafone Card*
-│╭────✦───✦───╮
-╞╡ *Value:ʚ جنيه* `{card['amount']}`
-╞╡ *Gift Units:ʚ وحده* `{card['gift']}`
-╞╡ *Remaining:ʚ متبقي* `{card['remaining']}`
-│╰────✦───✦───╯
-│╭──────✦──────────╮
-╞╡*Code:* `{ussd}`
-│╰──────✦──────────╯
-╰────═⟃TALASHNY⟄═────╯"""
+*╭────═⟃TALASHNY⟄═────╮*
+*│*            *Vodafone Card*
+*│╭────✦───✦───╮*
+*╞╡*Value:ʚ جنيه *`{card['amount']}`*
+*╞╡* Gift Units:ʚ وحده *`{card['gift']}`*
+*╞╡*  Remaining:ʚ متبقي *`{card['remaining']}`*
+*│╰────✦───✦───╯*
+*│╭──────✦──────────╮*
+*╞╡*   *Code:* `{ussd}`
+*│╰──────✦──────────╯*
+*╰────═⟃TALASHNY⟄═────╯*"""
 
     keyboard = {
         "inline_keyboard": [[
@@ -339,3 +339,4 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
+
