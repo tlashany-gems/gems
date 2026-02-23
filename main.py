@@ -1,7 +1,6 @@
 import time
 import json
 import os
-import hashlib
 import urllib.request
 import urllib.parse
 import ssl
@@ -19,6 +18,7 @@ RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 ACCOUNTS = [
     {"phone": "01008967492", "password": "##1122334455Qq"},
     {"phone": "01018529827", "password": "1052003Mm@#$"},
+    {"phone": "01003971136", "password": "1052003Mm$#@"},
 ]
 
 STATE_FILE  = "bot_state.json"
@@ -28,7 +28,6 @@ TG_URL      = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 tokens = [{"token": None, "expiry": 0} for _ in ACCOUNTS]
 
 CURRENT_ACCOUNT    = 0
-LAST_RESPONSE_HASH = None
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
@@ -254,11 +253,11 @@ def handle_callbacks():
 #  MAIN CHECK
 # ══════════════════════════════════════════
 def check_and_update():
-    global CURRENT_ACCOUNT, LAST_RESPONSE_HASH
+    global CURRENT_ACCOUNT
 
     idx   = CURRENT_ACCOUNT
     phone = ACCOUNTS[idx]["phone"]
-    log("INFO", f"🔄 [{idx+1}/2] {phone}")
+    log("INFO", f"🔄 [{idx+1}/3] {phone}")
 
     CURRENT_ACCOUNT = (CURRENT_ACCOUNT + 1) % len(ACCOUNTS)
 
@@ -271,13 +270,7 @@ def check_and_update():
     if raw_text is None:
         return
 
-    current_hash = hashlib.md5(raw_text.encode()).hexdigest()
-    if current_hash == LAST_RESPONSE_HASH:
-        log("INFO", f"⚡ No changes [{phone}]")
-        return
-
-    LAST_RESPONSE_HASH = current_hash
-    log("INFO", f"🔁 Changes [{phone}] — {len(all_cards)} cards")
+    log("INFO", f"🔁 Processing [{phone}] — {len(all_cards)} cards")
 
     target     = all_cards[:MAX_CARDS]
     target_map = {c["serial"]: c for c in target}
