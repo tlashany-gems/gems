@@ -11,20 +11,24 @@ import ssl
 # ══════════════════════════════════════════
 BOT_TOKEN      = "5713654811:AAHfzPDk5LHQ8-DI2ELzQseRn_s0GEykbZE"
 CHANNEL_ID     = "@FY_TF"
-PHONE          = "01003971136"
-PASSWORD       = "1052003Mm$#@"
-CHECK_INTERVAL = 15
+CHECK_INTERVAL = 5
 MIN_GIFT       = 85
 MAX_CARDS      = 2
+RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
-RECHARGE_URL = "https://telegrambot.serv00.net/recharge.php"
+ACCOUNTS = [
+    {"phone": "01008967492", "password": "##1122334455"},
+    {"phone": "01018529827", "password": "1052003Mm@#$"},
+    {"phone": "01003971136", "password": "1052003Mm$#@"},
+]
 
 STATE_FILE  = "bot_state.json"
 OFFSET_FILE = "tg_offset.txt"
 TG_URL      = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
-CURRENT_TOKEN      = None
-TOKEN_EXPIRY       = 0
+tokens = [{"token": None, "expiry": 0} for _ in ACCOUNTS]
+
+CURRENT_ACCOUNT    = 0
 LAST_RESPONSE_HASH = None
 
 SSL_CTX = ssl.create_default_context()
@@ -81,14 +85,15 @@ def tg(method, **params):
 # ══════════════════════════════════════════
 #  VODAFONE
 # ══════════════════════════════════════════
-def vf_login():
+def vf_login(idx):
+    acc = ACCOUNTS[idx]
     try:
         raw = http_post(
             "https://mobile.vodafone.com.eg/auth/realms/vf-realm/protocol/openid-connect/token",
             data={
                 "grant_type":    "password",
-                "username":      PHONE,
-                "password":      PASSWORD,
+                "username":      acc["phone"],
+                "password":      acc["password"],
                 "client_secret": "95fd95fb-7489-4958-8ae6-d31a525cd20a",
                 "client_id":     "ana-vodafone-app"
             },
@@ -102,30 +107,28 @@ def vf_login():
         token      = data.get("access_token")
         expires_in = data.get("expires_in", 3600)
         if token:
-            log("INFO", f"✅ VF Login OK | ~{expires_in//60} min")
-            return token, time.time() + expires_in - 180
-        log("ERR", f"❌ Login failed: {data.get('error_description','?')}")
-        return None, 0
+            tokens[idx]["token"]  = token
+            tokens[idx]["expiry"] = time.time() + expires_in - 180
+            log("INFO", f"✅ Login OK [{acc['phone']}] ~{expires_in//60} min")
+            return token
+        log("ERR", f"❌ Login failed [{acc['phone']}]: {data.get('error_description','?')}")
+        return None
     except Exception as e:
-        log("ERR", f"vf_login: {e}")
-        return None, 0
+        log("ERR", f"vf_login[{idx}]: {e}")
+        return None
 
-def get_token():
-    global CURRENT_TOKEN, TOKEN_EXPIRY
-    if CURRENT_TOKEN and time.time() < TOKEN_EXPIRY:
-        return CURRENT_TOKEN
-    log("INFO", "🔑 Refreshing token...")
-    token, expiry = vf_login()
-    if token:
-        CURRENT_TOKEN = token
-        TOKEN_EXPIRY  = expiry
-    return token
+def get_token(idx):
+    t = tokens[idx]
+    if t["token"] and time.time() < t["expiry"]:
+        return t["token"]
+    log("INFO", f"🔑 Refreshing [{ACCOUNTS[idx]['phone']}]...")
+    return vf_login(idx)
 
-def vf_promos(token):
+def vf_promos(token, phone):
     try:
         raw_text = http_get(
             f"https://web.vodafone.com.eg/services/dxl/ramadanpromo/promotion"
-            f"?@type=RamadanHub&channel=website&msisdn={PHONE}",
+            f"?@type=RamadanHub&channel=website&msisdn={phone}",
             headers={
                 "Authorization":   f"Bearer {token}",
                 "User-Agent":      "Mozilla/5.0",
@@ -134,7 +137,7 @@ def vf_promos(token):
                 "api-host":        "PromotionHost",
                 "channel":         "WEB",
                 "Accept-Language": "ar",
-                "msisdn":          PHONE,
+                "msisdn":          phone,
                 "Content-Type":    "application/json",
                 "Referer":         "https://web.vodafone.com.eg/ar/ramadan"
             }
@@ -151,26 +154,20 @@ def vf_promos(token):
                          for x in action.get("characteristics", [])}
                     if not c:
                         continue
-
                     try:
                         gift = int(c.get("GIFT_UNITS", 0))
                     except:
                         continue
-
                     if gift < MIN_GIFT:
                         continue
-
                     serial = str(c.get("CARD_SERIAL", "")).strip()
                     if len(serial) != 13:
-                        log("WARN", f"⚠️ Skip serial [{serial}] ({len(serial)} digits)")
                         continue
-
                     try:
                         amount    = int(c.get("amount", 0))
                         remaining = int(c.get("REMAINING_DEDICATIONS", 0))
                     except:
                         continue
-
                     cards.append({
                         "serial":    serial,
                         "gift":      gift,
@@ -179,43 +176,37 @@ def vf_promos(token):
                     })
 
         cards.sort(key=lambda x: (x["gift"], x["amount"]), reverse=True)
-        log("INFO", f"✅ {len(cards)} cards passed gift >= {MIN_GIFT} filter")
         return raw_text, cards
 
     except Exception as e:
-        log("WARN", f"vf_promos: {e}")
+        log("WARN", f"vf_promos[{phone}]: {e}")
         return None, []
 
-def best_cards(cards):
-    return cards[:MAX_CARDS]
-
 # ══════════════════════════════════════════
-#  MESSAGE — زر أخضر بـ style
+#  MESSAGE
 # ══════════════════════════════════════════
 def build_msg(card):
     serial = str(card["serial"]).strip()
     ussd   = "*858*" + serial + "#"
-
-    recharge_link = f"{RECHARGE_URL}?serial={serial}"
+    link   = f"{RECHARGE_URL}?serial={serial}"
 
     text = f"""
 ╭────═⟃TALASHNY⟄═────╮
 │            *Vodafone Card*
 │╭────✦───✦───╮
-╞╡ *Value:* ʚجنيه `{card['amount']}`
-╞╡ *Gift Units:* ʚوحده `{card['gift']}`
-╞╡ *Remaining:* ʚمتبقي `{card['remaining']}`
+╞╡ *Value:ʚ جنيه* `{card['amount']}`
+╞╡ *Gift Units:ʚ وحده* `{card['gift']}`
+╞╡ *Remaining:ʚ متبقي* `{card['remaining']}`
 │╰────✦───✦───╯
 │╭──────✦──────────╮
-╞╡*Recharge Code:* `{ussd}`   
+╞╡*Code:* `{ussd}`
 │╰──────✦──────────╯
 ╰────═⟃TALASHNY⟄═────╯"""
 
-    # ✅ style: "primary" = أخضر في تيليجرام الجديد
     keyboard = {
         "inline_keyboard": [[
-            {
-                "text":  "✦اضغط لشحن اسرع✦",
+            
+            {"text":  "✦ اضغط لشحن اسرع ✦",
                 "url":   recharge_link,
                 "style": "success"
             }
@@ -261,51 +252,48 @@ def handle_callbacks():
             save_offset(upd["update_id"] + 1)
 
 # ══════════════════════════════════════════
-#  MAIN CHECK
+#  MAIN CHECK — بس حذف لما remaining = 0
 # ══════════════════════════════════════════
 def check_and_update():
-    global LAST_RESPONSE_HASH
+    global CURRENT_ACCOUNT, LAST_RESPONSE_HASH
 
-    log("INFO", "🔄 Checking...")
-    token = get_token()
+    idx   = CURRENT_ACCOUNT
+    phone = ACCOUNTS[idx]["phone"]
+    log("INFO", f"🔄 [{idx+1}/3] {phone}")
+
+    CURRENT_ACCOUNT = (CURRENT_ACCOUNT + 1) % len(ACCOUNTS)
+
+    token = get_token(idx)
     if not token:
-        log("ERR", "❌ No token")
+        log("ERR", f"❌ No token [{phone}]")
         return
 
-    raw_text, all_cards = vf_promos(token)
+    raw_text, all_cards = vf_promos(token, phone)
     if raw_text is None:
         return
 
     current_hash = hashlib.md5(raw_text.encode()).hexdigest()
     if current_hash == LAST_RESPONSE_HASH:
-        log("INFO", "⚡ No changes")
+        log("INFO", f"⚡ No changes [{phone}]")
         return
 
     LAST_RESPONSE_HASH = current_hash
-    log("INFO", "🔁 Changes detected — processing...")
+    log("INFO", f"🔁 Changes [{phone}] — {len(all_cards)} cards")
 
-    target     = best_cards(all_cards)
+    target     = all_cards[:MAX_CARDS]
     target_map = {c["serial"]: c for c in target}
     state      = load_state()
 
+    # ✅ احذف بس لما remaining = 0 أو الكارت اختفى من الـ API
     for mid in list(state.keys()):
         serial = state[mid]["serial"]
         live   = target_map.get(serial)
         if not live or live["remaining"] <= 0:
             tg("deleteMessage", chat_id=CHANNEL_ID, message_id=int(mid))
             del state[mid]
-            log("INFO", f"🗑️ Deleted {mid}")
+            log("INFO", f"🗑️ Deleted {mid} — خلصت")
 
-    for mid, cd in list(state.items()):
-        live = target_map.get(cd["serial"])
-        if live and live["remaining"] != cd["remaining"]:
-            cd["remaining"] = live["remaining"]
-            txt, kb = build_msg(cd)
-            tg("editMessageText", chat_id=CHANNEL_ID,
-               message_id=int(mid), text=txt,
-               parse_mode="Markdown", reply_markup=kb)
-            log("INFO", f"✏️ Updated {mid}")
-
+    # ✅ ابعت الكروت الجديدة بس — مش editMessage خالص
     sent = {v["serial"] for v in state.values()}
     for serial, card in target_map.items():
         if len(state) >= MAX_CARDS:
@@ -317,7 +305,7 @@ def check_and_update():
                      reply_markup=kb)
             if res and "message_id" in res:
                 state[str(res["message_id"])] = card.copy()
-                log("INFO", f"📤 Sent [{serial}] gift={card['gift']}")
+                log("INFO", f"📤 Sent [{serial}] gift={card['gift']} | {phone}")
 
     save_state(state)
     log("INFO", f"✅ Done — {len(state)} active")
@@ -326,12 +314,10 @@ def check_and_update():
 #  MAIN
 # ══════════════════════════════════════════
 if __name__ == "__main__":
-    log("INFO", "🚀 TALASHNY | style=primary green button")
+    log("INFO", "🚀 TALASHNY | 3 accounts | 5s | light mode | success button")
 
-    token, expiry = vf_login()
-    if token:
-        CURRENT_TOKEN = token
-        TOKEN_EXPIRY  = expiry
+    for i in range(len(ACCOUNTS)):
+        vf_login(i)
 
     clear_pending()
     last_check = 0
@@ -353,5 +339,3 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
-
-
