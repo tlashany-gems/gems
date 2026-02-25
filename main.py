@@ -11,8 +11,8 @@ import ssl
 BOT_TOKEN      = "5713654811:AAHfzPDk5LHQ8-DI2ELzQseRn_s0GEykbZE"
 CHANNEL_ID     = "@FY_TF"
 CHECK_INTERVAL = 5
-MIN_GIFT       = 85
-MAX_CARDS      = 2
+MIN_GIFT       = 131
+MAX_CARDS      = 3
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
 ACCOUNTS = [
@@ -329,3 +329,4 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
+
