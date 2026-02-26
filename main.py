@@ -4,15 +4,16 @@ import os
 import urllib.request
 import urllib.parse
 import ssl
+import threading
 
 # ══════════════════════════════════════════
 #  CONFIG
 # ══════════════════════════════════════════
-BOT_TOKEN      = "5713654811:AAHfzPDk5LHQ8-DI2ELzQseRn_s0GEykbZE"
+BOT_TOKEN      = "7973273382:AAGfOQZmr6N_jkcy9wFc8J0l1C0UUvzyrj0"
 CHANNEL_ID     = "@FY_TF"
 CHECK_INTERVAL = 5
-MIN_GIFT       = 131
-MAX_CARDS      = 3
+MIN_GIFT       = 200          # ✅ كروت أكبر من 130 بس
+MAX_CARDS      = 2
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
 ACCOUNTS = [
@@ -27,7 +28,7 @@ TG_URL      = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
 tokens = [{"token": None, "expiry": 0} for _ in ACCOUNTS]
 
-CURRENT_ACCOUNT    = 0
+CURRENT_ACCOUNT = 0
 
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
@@ -156,8 +157,11 @@ def vf_promos(token, phone):
                         gift = int(c.get("GIFT_UNITS", 0))
                     except:
                         continue
-                    if gift < MIN_GIFT:
+
+                    # ✅ فلتر: gift لازم يكون أكبر من 130
+                    if gift <= MIN_GIFT:
                         continue
+
                     serial = str(c.get("CARD_SERIAL", "")).strip()
                     if len(serial) != 13:
                         continue
@@ -181,7 +185,7 @@ def vf_promos(token, phone):
         return None, []
 
 # ══════════════════════════════════════════
-#  MESSAGE — ✅ indent مصلح
+#  MESSAGE
 # ══════════════════════════════════════════
 def build_msg(card):
     serial = str(card["serial"]).strip()
@@ -204,9 +208,8 @@ def build_msg(card):
     keyboard = {
         "inline_keyboard": [[
             {
-                "text":  "⌁ اضغط لشحن اسرع ⌁",
-                "url":   link,
-                "style": "success"
+                "text": "⌁ اضغط لشحن اسرع ⌁",
+                "url":  link
             }
         ]]
     }
@@ -235,19 +238,37 @@ def clear_pending():
     res = tg("getUpdates", offset=-1, limit=1)
     if res:
         last = res[0]["update_id"]
-        tg("getUpdates", offset=last+1)
-        save_offset(last+1)
+        tg("getUpdates", offset=last + 1)
+        save_offset(last + 1)
         log("INFO", f"🧹 Cleared — offset={last+1}")
     else:
         save_offset(0)
 
-def handle_callbacks():
-    offset  = load_offset()
-    updates = tg("getUpdates", offset=offset, limit=85,
-                 timeout=0, allowed_updates=["callback_query"])
-    if updates:
-        for upd in updates:
-            save_offset(upd["update_id"] + 1)
+# ══════════════════════════════════════════
+#  ✅ LONG POLLING — thread منفصل
+#  البوت بيستقبل التحديثات من السيرفر على طول
+# ══════════════════════════════════════════
+def long_poll_loop():
+    log("INFO", "📡 Long polling started — waiting for server updates...")
+    while True:
+        try:
+            offset  = load_offset()
+            # timeout=30 → السيرفر بيستنى 30 ثانية لو ما فيش updates
+            updates = tg(
+                "getUpdates",
+                offset=offset,
+                limit=100,
+                timeout=30,
+                allowed_updates=["callback_query", "message"]
+            )
+            if updates:
+                for upd in updates:
+                    uid = upd["update_id"]
+                    save_offset(uid + 1)
+                    log("INFO", f"📩 Update received: {uid}")
+        except Exception as e:
+            log("ERR", f"LongPoll: {e}")
+            time.sleep(3)
 
 # ══════════════════════════════════════════
 #  MAIN CHECK
@@ -270,20 +291,29 @@ def check_and_update():
     if raw_text is None:
         return
 
-    log("INFO", f"🔁 Processing [{phone}] — {len(all_cards)} cards")
+    log("INFO", f"🔁 [{phone}] — {len(all_cards)} cards with gift > {MIN_GIFT}")
 
     target     = all_cards[:MAX_CARDS]
     target_map = {c["serial"]: c for c in target}
     state      = load_state()
 
+    # ✅ حذف الكروت اللي remaining=0 أو اختفت من السيرفر
     for mid in list(state.keys()):
         serial = state[mid]["serial"]
         live   = target_map.get(serial)
-        if not live or live["remaining"] <= 0:
+
+        should_delete = (
+            live is None or        # اختفى من السيرفر
+            live["remaining"] <= 0 # ✅ المتبقي وصل صفر
+        )
+
+        if should_delete:
             tg("deleteMessage", chat_id=CHANNEL_ID, message_id=int(mid))
             del state[mid]
-            log("INFO", f"🗑️ Deleted {mid}")
+            reason = "remaining=0" if (live and live["remaining"] <= 0) else "gone from server"
+            log("INFO", f"🗑️ Deleted msg={mid} serial={serial} [{reason}]")
 
+    # ✅ بعت الكروت الجديدة (gift > 130 فقط)
     sent = {v["serial"] for v in state.values()}
     for serial, card in target_map.items():
         if len(state) >= MAX_CARDS:
@@ -295,7 +325,7 @@ def check_and_update():
                      reply_markup=kb)
             if res and "message_id" in res:
                 state[str(res["message_id"])] = card.copy()
-                log("INFO", f"📤 Sent [{serial}] gift={card['gift']} | {phone}")
+                log("INFO", f"📤 Sent [{serial}] gift={card['gift']} remaining={card['remaining']} | {phone}")
 
     save_state(state)
     log("INFO", f"✅ Done — {len(state)} active")
@@ -304,18 +334,23 @@ def check_and_update():
 #  MAIN
 # ══════════════════════════════════════════
 if __name__ == "__main__":
-    log("INFO", "🚀 TALASHNY | 2 accounts | 5s | light | success button")
+    log("INFO", f"🚀 TALASHNY | MIN_GIFT > {MIN_GIFT} | Long Polling ON | Auto Delete remaining=0")
 
+    # login كل الحسابات
     for i in range(len(ACCOUNTS)):
         vf_login(i)
 
     clear_pending()
+
+    # ✅ شغّل long polling في thread منفصل عشان ما يوقفش الـ main loop
+    poll_thread = threading.Thread(target=long_poll_loop, daemon=True)
+    poll_thread.start()
+
     last_check = 0
     fail_count = 0
 
     while True:
         try:
-            handle_callbacks()
             if time.time() - last_check >= CHECK_INTERVAL:
                 check_and_update()
                 last_check = time.time()
@@ -329,4 +364,3 @@ if __name__ == "__main__":
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
             time.sleep(5 if fail_count < 10 else 30)
-
