@@ -9,17 +9,17 @@ import threading
 # ══════════════════════════════════════════
 #  CONFIG
 # ══════════════════════════════════════════
-BOT_TOKEN      = "7973273382:AAGfOQZmr6N_jkcy9wFc8J0l1C0UUvzyrj0"
+BOT_TOKEN      = "5713654811:AAHfzPDk5LHQ8-DI2ELzQseRn_s0GEykbZE"
 CHANNEL_ID     = "@FY_TF"
-CHECK_INTERVAL = 6
+CHECK_INTERVAL = 7            # ✅ كل 7 ثواني
 MIN_GIFT       = 129        # ✅ كروت أكبر من 130 بس
 MAX_CARDS      = 1
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
+# ✅ حسابين بس
 ACCOUNTS = [
     {"phone": "01008967492", "password": "##1122334455Qq"},
     {"phone": "01018529827", "password": "1052003Mm@#$"},
-    {"phone": "01003971136", "password": "1052003Mm$#@"},
 ]
 
 STATE_FILE  = "bot_state.json"
@@ -158,7 +158,7 @@ def vf_promos(token, phone):
                     except:
                         continue
 
-                    # ✅ فلتر: gift لازم يكون أكبر من 130
+                    # ✅ كروت gift أكبر من 130 بس
                     if gift <= MIN_GIFT:
                         continue
 
@@ -185,7 +185,7 @@ def vf_promos(token, phone):
         return None, []
 
 # ══════════════════════════════════════════
-#  MESSAGE
+#  MESSAGE — زر أحمر ✅
 # ══════════════════════════════════════════
 def build_msg(card):
     serial = str(card["serial"]).strip()
@@ -208,8 +208,9 @@ def build_msg(card):
     keyboard = {
         "inline_keyboard": [[
             {
-                "text": "⌁ اضغط لشحن اسرع ⌁",
-                "url":  link
+                "text":  "⌁ اضغط لشحن اسرع ⌁",
+                "url":   link,
+                "style": "danger"   # ✅ زر أحمر
             }
         ]]
     }
@@ -246,14 +247,13 @@ def clear_pending():
 
 # ══════════════════════════════════════════
 #  ✅ LONG POLLING — thread منفصل
-#  البوت بيستقبل التحديثات من السيرفر على طول
+#  دايمًا بيستقبل التحديثات من السيرفر
 # ══════════════════════════════════════════
 def long_poll_loop():
     log("INFO", "📡 Long polling started — waiting for server updates...")
     while True:
         try:
             offset  = load_offset()
-            # timeout=30 → السيرفر بيستنى 30 ثانية لو ما فيش updates
             updates = tg(
                 "getUpdates",
                 offset=offset,
@@ -265,7 +265,7 @@ def long_poll_loop():
                 for upd in updates:
                     uid = upd["update_id"]
                     save_offset(uid + 1)
-                    log("INFO", f"📩 Update received: {uid}")
+                    log("INFO", f"📩 Update: {uid}")
         except Exception as e:
             log("ERR", f"LongPoll: {e}")
             time.sleep(3)
@@ -278,7 +278,7 @@ def check_and_update():
 
     idx   = CURRENT_ACCOUNT
     phone = ACCOUNTS[idx]["phone"]
-    log("INFO", f"🔄 [{idx+1}/3] {phone}")
+    log("INFO", f"🔄 [{idx+1}/{len(ACCOUNTS)}] {phone}")
 
     CURRENT_ACCOUNT = (CURRENT_ACCOUNT + 1) % len(ACCOUNTS)
 
@@ -291,29 +291,29 @@ def check_and_update():
     if raw_text is None:
         return
 
-    log("INFO", f"🔁 [{phone}] — {len(all_cards)} cards with gift > {MIN_GIFT}")
+    log("INFO", f"🔁 [{phone}] — {len(all_cards)} cards (gift > {MIN_GIFT})")
 
     target     = all_cards[:MAX_CARDS]
     target_map = {c["serial"]: c for c in target}
     state      = load_state()
 
-    # ✅ حذف الكروت اللي remaining=0 أو اختفت من السيرفر
+    # ✅ حذف الكروت اللي remaining=0 أو اختفت
     for mid in list(state.keys()):
         serial = state[mid]["serial"]
         live   = target_map.get(serial)
 
         should_delete = (
-            live is None or        # اختفى من السيرفر
-            live["remaining"] <= 0 # ✅ المتبقي وصل صفر
+            live is None or
+            live["remaining"] <= 0   # ✅ المتبقي وصل صفر → يتحذف
         )
 
         if should_delete:
             tg("deleteMessage", chat_id=CHANNEL_ID, message_id=int(mid))
             del state[mid]
-            reason = "remaining=0" if (live and live["remaining"] <= 0) else "gone from server"
+            reason = "remaining=0" if (live and live["remaining"] <= 0) else "gone"
             log("INFO", f"🗑️ Deleted msg={mid} serial={serial} [{reason}]")
 
-    # ✅ بعت الكروت الجديدة (gift > 130 فقط)
+    # ✅ بعت الكروت الجديدة (gift > 130)
     sent = {v["serial"] for v in state.values()}
     for serial, card in target_map.items():
         if len(state) >= MAX_CARDS:
@@ -325,7 +325,7 @@ def check_and_update():
                      reply_markup=kb)
             if res and "message_id" in res:
                 state[str(res["message_id"])] = card.copy()
-                log("INFO", f"📤 Sent [{serial}] gift={card['gift']} remaining={card['remaining']} | {phone}")
+                log("INFO", f"📤 Sent [{serial}] gift={card['gift']} rem={card['remaining']} | {phone}")
 
     save_state(state)
     log("INFO", f"✅ Done — {len(state)} active")
@@ -334,15 +334,14 @@ def check_and_update():
 #  MAIN
 # ══════════════════════════════════════════
 if __name__ == "__main__":
-    log("INFO", f"🚀 TALASHNY | MIN_GIFT > {MIN_GIFT} | Long Polling ON | Auto Delete remaining=0")
+    log("INFO", f"🚀 TALASHNY | {len(ACCOUNTS)} accounts | {CHECK_INTERVAL}s | gift>{MIN_GIFT} | Red button | Long Polling")
 
-    # login كل الحسابات
     for i in range(len(ACCOUNTS)):
         vf_login(i)
 
     clear_pending()
 
-    # ✅ شغّل long polling في thread منفصل عشان ما يوقفش الـ main loop
+    # ✅ Long polling في thread منفصل
     poll_thread = threading.Thread(target=long_poll_loop, daemon=True)
     poll_thread.start()
 
@@ -363,8 +362,4 @@ if __name__ == "__main__":
         except Exception as e:
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
-
             time.sleep(5 if fail_count < 10 else 30)
-
-
-
