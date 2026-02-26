@@ -12,8 +12,8 @@ import threading
 BOT_TOKEN      = "7973273382:AAGfOQZmr6N_jkcy9wFc8J0l1C0UUvzyrj0"
 CHANNEL_ID     = "@FY_TF"
 CHECK_INTERVAL = 5
-MIN_GIFT       = 200          # ✅ كروت أكبر من 130 بس
-MAX_CARDS      = 2
+MIN_GIFT       = 130         # ✅ كروت أكبر من 130 بس
+MAX_CARDS      = 3
 RECHARGE_URL   = "https://telegrambot.serv00.net/recharge.php"
 
 ACCOUNTS = [
@@ -363,4 +363,5 @@ if __name__ == "__main__":
         except Exception as e:
             fail_count += 1
             log("ERR", f"Error #{fail_count}: {e}")
+
             time.sleep(5 if fail_count < 10 else 30)
